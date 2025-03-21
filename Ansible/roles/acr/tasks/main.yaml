@@ -1,0 +1,31 @@
+---
+- name: Ensure Podman collection is installed
+  ansible.builtin.command:
+    cmd: ansible-galaxy collection install containers.podman
+
+- name: Log in to ACR
+  containers.podman.podman_login:
+    registry: "{{ acr_registry }}"
+    username: "{{ acr_username }}"
+    password: "{{ vault_acr_password }}"
+
+- name: Pull the Nginx image from Docker Hub
+  containers.podman.podman_image:
+    name: "{{ image_name_nginx }}"
+    tag: "{{ image_tag }}"
+    state: present
+    pull: yes
+    force: yes
+    
+- name: Tag Nginx image for ACR
+  containers.podman.podman_image:
+    name: "{{ image_name_nginx }}"
+    tag: "{{ acr_registry }}/{{ container_name_nginx }}:{{ image_tag }}"
+    push: no
+
+- name: Push the Nginx image to ACR
+  containers.podman.podman_image:
+    name: "{{ acr_registry }}/{{ container_name_nginx }}"
+    tag: "{{ image_tag }}"
+    push: yes
+

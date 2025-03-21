@@ -1,0 +1,107 @@
+---
+- name: Update apt repositories
+  become: true
+  apt:
+    update_cache: yes
+    upgrade: yes
+
+- name: Install software-properties-common
+  apt:
+    name: software-properties-common
+    state: present
+
+- name: Add projectatomic repository
+  apt_repository:
+    repo: ppa:projectatomic/ppa
+    state: present
+
+- name: Install Podman
+  apt:
+    name: podman
+    state: present
+    
+- name: Log in to ACR
+  containers.podman.podman_login:
+    registry: "{{ acr_registry }}"
+    username: "{{ acr_username }}"
+    password: "{{ acr_password }}"
+
+- name: Pull Nginx image from ACR
+  containers.podman.podman_image:
+    name: "{{ acr_registry }}/{{ container_name_nginx }}:casopractico2"
+    state: present
+
+- name: Copy htpasswd file for basic authentication
+  ansible.builtin.copy:
+    src: /home/ubuntu/Documents/terraform/practica2/ansible/roles/vm/files/content/htpasswd
+    dest: /etc/nginx/.htpasswd
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes  # Asegura que se ejecute como root
+
+- name: Copy Nginx content (index.html, etc.)
+  ansible.builtin.copy:
+    src: "/home/ubuntu/Documents/terraform/practica2/ansible/roles/vm/files/content"
+    dest: /usr/share/nginx/html
+    owner: "www-data"
+    group: "www-data"
+    mode: '0644'
+  become: yes  # Esto permite que la tarea se ejecute como root
+
+- name: Log in to ACR for Podman (explicit)
+  shell: podman login acrcasopractico2.azurecr.io -u "{{ acr_username }}" -p "{{ acr_password }}"
+  become: yes
+  register: login_output
+  failed_when: login_output.rc != 0
+
+- name: Run Nginx container without SSL and with authentication
+  containers.podman.podman_container:
+    name: nginx_web_service
+    image: "{{ acr_registry }}/{{ container_name_nginx }}:{{ image_tag }}"
+    state: started
+    ports:
+      - "80:80"
+    network_mode: host  # Usar la red del host
+    env:
+      NGINX_AUTH_HTPASSWD: /etc/nginx/htpasswd
+    volumes:
+      - /etc/nginx/.htpasswd:/etc/nginx/.htpasswd
+      - /usr/share/nginx/html:/usr/share/nginx/html
+  become: yes  # Asegúrate de ejecutar como root si es necesario
+
+- name: Create Podman systemd service for Nginx container
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/podman-nginx_web_service.service"
+    content: |
+      [Unit]
+      Description=Podman container for Nginx Web Service
+      After=network.target
+
+      [Service]
+      Restart=always
+      ExecStart=/usr/bin/podman run --name nginx_web_service -d -p 80:80 --restart=always acrcasopractico2.azurecr.io/nginx_web_service:casopractico2
+      ExecStop=/usr/bin/podman stop nginx_web_service
+      ExecStopPost=/usr/bin/podman rm nginx_web_service
+      ExecStartPre=-/usr/bin/podman pull acrcasopractico2.azurecr.io/nginx_web_service:casopractico2
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+    owner: root
+    group: root
+  become: yes
+
+- name: Reload systemd to recognize new Podman service
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: Enable and start Podman service for Nginx container
+  systemd:
+    name: "podman-nginx_web_service.service"
+    state: started
+    enabled: yes
+  become: yes
+
+
