@@ -1,0 +1,18 @@
+app_namespace: "practica2"
+acr_registry: "acrcasopractico2.azurecr.io"
+acr_dockerconfigjson: "{{ lookup('file', '/path/to/.config/containers/auth.json') }}"
+frontend_deployment_name: "my-frontend-deployment"
+frontend_image: "my-frontend-image:latest"
+app:
+  backend:
+    name: backend
+    image: redis
+    image_tag: "6.0.8"
+    replicas: 1
+    port: 6379
+  frontend:
+    name: frontend
+    image: nginx
+    image_tag: "latest"
+    replicas: 1
+    port: 80

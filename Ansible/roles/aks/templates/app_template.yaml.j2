@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ app.backend.name }}"
+  namespace: "{{ app_namespace }}"
+spec:
+  replicas: {{ app.backend.replicas }}
+  selector:
+    matchLabels:
+      app: "{{ app.backend.name }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ app.backend.name }}"
+    spec:
+      containers:
+      - name: "{{ app.backend.name }}"
+        image: "{{ acr_registry }}/{{ app.backend.name }}:{{ app.backend.image_tag }}"
+        ports:
+        - containerPort: {{ app.backend.port }}
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-pvc  # PersistentVolumeClaim creado anteriormente
